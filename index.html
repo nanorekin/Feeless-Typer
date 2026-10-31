@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Feeless Typer</title>
+<meta name="description" content="A free crypto typing game. Type the falling words before they reach the bottom. Daily challenge, quick 60-second rounds and survival mode, with Nano at the heart. No fees.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root {
+  --bg:#0b1220; --card:#121c30; --ink:#e7eefc; --muted:#93a3c0; --line:#24334f;
+  --accent:#4ea1ff; --accent-ink:#04101f; --field:#0e1729;
+  --good:#4ade80; --bad:#ff6b6b; --gold:#fbbf24; --scrim:rgba(4,9,20,0.82); color-scheme:dark;
+}
+* { box-sizing:border-box; }
+html { background:var(--bg); }
+body {
+  margin:0; background:var(--bg); color:var(--ink);
+  font:16px/1.5 "Sora","Helvetica Neue",Arial,sans-serif; -webkit-text-size-adjust:100%;
+  padding-inline:max(16px, env(safe-area-inset-left, 0px)); padding-block:12px 40px;
+}
+[hidden] { display:none !important; }
+.layout { max-width:980px; margin-inline:auto; display:grid; grid-template-columns:minmax(0,1fr); gap:24px; align-items:start; }
+@media (min-width:900px) { .layout { grid-template-columns:minmax(0,480px) minmax(0,1fr); } .stage { position:sticky; top:12px; } }
+.layout > * { min-width:0; }
+.mono { font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums; }
+button, .btn {
+  font:600 0.9rem "Sora","Helvetica Neue",Arial,sans-serif; cursor:pointer; text-decoration:none;
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  padding:8px 14px; min-height:44px; border-radius:8px; border:1px solid var(--line);
+  background:var(--card); color:var(--ink); touch-action:manipulation; line-height:1.2;
+}
+button:disabled { opacity:0.5; cursor:not-allowed; }
+button.primary, .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:800; }
+button[aria-pressed="true"] { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+button.primary[aria-pressed="true"] { box-shadow:none; }
+button:focus-visible, .btn:focus-visible, summary:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+
+.stage { display:flex; flex-direction:column; gap:10px; width:100%; max-width:480px; margin-inline:auto; }
+@media (min-width:900px) { .stage { margin-inline:0; } }
+.topbar { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.topbar h1 { margin:0; font-weight:800; font-size:1.25rem; line-height:1.1; letter-spacing:-0.01em; white-space:nowrap; }
+.topbar .sup { color:var(--gold); font-size:0.9em; }
+.modes { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.modes button { min-height:40px; padding:4px 8px; font-size:0.82rem; }
+.mod { font-size:0.78rem; line-height:1.3; color:var(--muted); min-height:1.3em; }
+.mod b { color:var(--gold); font-weight:600; }
+.hud { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+.hud div { display:flex; flex-direction:column; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:4px 10px; min-width:0; }
+.hud small { color:var(--muted); font-size:0.62rem; text-transform:uppercase; letter-spacing:0.08em; }
+.hud b { font-family:"JetBrains Mono",monospace; font-size:1.05rem; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.wrap { position:relative; border-radius:12px; overflow:hidden; background:var(--card); border:1px solid var(--line); touch-action:none; }
+canvas { display:block; width:100%; height:auto; }
+.tapzone { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(11,18,32,0.55); z-index:3; cursor:pointer; }
+.tapzone span { background:var(--card); border:1px solid var(--accent); border-radius:999px; padding:10px 18px; font-weight:800; font-size:0.9rem; }
+.typerfield { position:absolute; width:1px; height:1px; opacity:0; border:0; padding:0; margin:0; font-size:16px; }
+.overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:12px; background:var(--scrim); z-index:4; }
+.sheet { width:100%; max-width:340px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; display:flex; flex-direction:column; gap:10px; }
+.sheet h2 { margin:0; font-weight:800; font-size:1.2rem; line-height:1.2; }
+.sheet p { margin:0; color:var(--muted); font-size:0.84rem; }
+.sheet .big { font-family:"JetBrains Mono",monospace; font-weight:600; font-size:2.4rem; line-height:1; }
+.sheet .newbest { color:var(--gold); font-weight:800; font-size:0.8rem; }
+.sheet .stack { display:flex; flex-direction:column; gap:8px; }
+.sheet .row2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.sheet .status { min-height:1.2em; font-size:0.78rem; color:var(--accent); word-break:break-word; }
+.ctl { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; }
+.ctl button { min-height:40px; padding:4px 8px; font-size:0.82rem; }
+
+.rest { display:flex; flex-direction:column; gap:20px; }
+.card2 { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:18px; display:flex; flex-direction:column; gap:12px; }
+.card2 h2 { font-weight:800; font-size:1.2rem; margin:0; line-height:1.15; }
+.card2 p { margin:0; color:var(--muted); font-size:0.9rem; }
+.stats { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+.stat { background:var(--field); border:1px solid var(--line); border-radius:6px; padding:8px 10px; display:flex; flex-direction:column; min-width:0; }
+.stat small { color:var(--muted); font-size:0.72rem; }
+.stat b { font:600 1.25rem "JetBrains Mono",monospace; overflow-wrap:anywhere; }
+.hint { font-size:0.82rem; color:var(--muted); margin:0; }
+.status { font-size:0.85rem; min-height:1.3em; color:var(--accent); }
+.themes { display:flex; flex-wrap:wrap; gap:8px; }
+.themes button { flex-direction:column; align-items:flex-start; gap:0; padding:8px 12px; }
+.themes small { color:var(--muted); font-weight:500; font-size:0.7rem; }
+.amounts { display:flex; flex-wrap:wrap; gap:8px; }
+.amounts button { font-family:"JetBrains Mono",monospace; font-size:0.85rem; }
+.pay { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; }
+.qr { background:#fff; padding:10px; border-radius:6px; line-height:0; flex:none; }
+.qr img, .qr canvas { max-width:100%; height:auto; }
+.addr-box { flex:1 1 200px; min-width:0; display:flex; flex-direction:column; gap:10px; }
+.addr { font-family:"JetBrains Mono",monospace; font-size:0.78rem; word-break:break-all; user-select:all; background:var(--field); border:1px solid var(--line); border-radius:6px; padding:10px; }
+.rules { border:1px solid var(--line); border-radius:8px; background:var(--card); }
+.rules summary { cursor:pointer; padding:12px 14px; font-weight:800; }
+.rules-body { padding:0 14px 14px; display:flex; flex-direction:column; gap:10px; font-size:0.86rem; color:var(--muted); }
+.rules-body h3 { margin:6px 0 0; font:600 0.74rem "JetBrains Mono",monospace; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink); }
+.rules-body p { margin:0; }
+.toast { position:fixed; left:50%; bottom:calc(16px + env(safe-area-inset-bottom, 0px)); transform:translateX(-50%); max-width:min(92vw,420px); background:var(--card); border:1px solid var(--accent); border-radius:10px; padding:10px 14px; font-size:0.85rem; z-index:20; box-shadow:0 8px 30px rgba(0,0,0,0.5); text-align:center; }
+footer { color:var(--muted); font-size:0.8rem; }
+@media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto !important; transition:none !important; } }
+</style></head>
+<body>
+<noscript><p style="padding:16px">Feeless Typer needs JavaScript to run.</p></noscript>
+<div class="layout">
+  <main class="stage" id="stage">
+    <div class="topbar">
+      <h1>Feeless Typer <span class="sup" id="supmark" hidden title="Supporter">&#10022;</span></h1>
+      <button type="button" id="snd" aria-pressed="true" style="min-height:36px;padding:4px 12px;font-size:0.8rem">Sound on</button>
+    </div>
+    <div class="modes" role="group" aria-label="Mode">
+      <button type="button" id="m-daily" aria-pressed="false"><span id="dayno">Daily #1</span></button>
+      <button type="button" id="m-quick" aria-pressed="true">Quick 60</button>
+      <button type="button" id="m-survival" aria-pressed="false">Survival</button>
+    </div>
+    <div class="mod" id="modbox"></div>
+    <div class="hud">
+      <div><small id="h-plabel">Progress</small><b id="h-p">0/20</b></div>
+      <div><small>Score</small><b id="h-score">0</b></div>
+      <div><small>Combo</small><b id="h-combo">0</b></div>
+      <div><small>Lives</small><b id="h-lives">&#9829;&#9829;&#9829;</b></div>
+    </div>
+    <div class="wrap">
+      <canvas id="c" width="360" height="560" role="img" aria-label="Typing game board"></canvas>
+      <input id="typer" class="typerfield" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-hidden="true" tabindex="-1">
+      <div class="tapzone" id="tapzone"><span>Tap to start typing</span></div>
+      <div class="overlay" id="ov" role="dialog" aria-modal="true" aria-labelledby="o-title" hidden>
+        <div class="sheet">
+          <h2 id="o-title">Round complete</h2>
+          <div class="big mono" id="o-score">0</div>
+          <div class="newbest" id="o-new" hidden>New best</div>
+          <p id="o-text"></p>
+          <div class="stack">
+            <button type="button" class="primary" id="o-again">Play again</button>
+            <div class="row2">
+              <button type="button" id="o-share">Share</button>
+              <button type="button" id="o-tip">Tip 0.01 XNO</button>
+            </div>
+          </div>
+          <div class="status" id="o-status" role="status"></div>
+        </div>
+      </div>
+    </div>
+    <div class="ctl">
+      <button type="button" id="restart">New round</button>
+      <button type="button" id="b-tipjump">Tip XNO</button>
+    </div>
+  </main>
+
+  <div class="rest">
+    <details class="rules">
+      <summary>How to play</summary>
+      <div class="rules-body">
+        <h3>Goal</h3>
+        <p>Crypto words fall from the top of the board. Type a word's first letter to lock onto it, then keep typing it before it reaches the bottom line. A word you finish in time is destroyed and scores points; a word that reaches the bottom costs a life.</p>
+        <h3>Typing</h3>
+        <p>Tap the board (or click it with a mouse) to bring up your keyboard, then just start typing — there is no text box to aim at. A wrong letter while locked onto a word breaks your combo but does not lose the word; keep trying the next correct letter.</p>
+        <h3>Scoring</h3>
+        <p>Each finished word scores roughly twice its number of letters, boosted by your current combo. Finishing words back to back raises the combo multiplier; a wrong letter or a word reaching the bottom resets it to zero.</p>
+        <h3>Modes</h3>
+        <p>Daily: the same 20 words in the same order for everyone, new at 00:00 UTC. Clear all 20 without running out of lives to mark the day cleared. Quick 60: a free-for-all for 60 seconds, words fall a little faster as the clock runs down. Survival: endless, words keep speeding up, game over at 0 lives.</p>
+        <h3>Lives and ranks</h3>
+        <p>You start with 3 lives (4 for supporters). Your words per minute (WPM) and accuracy are shown at the end of each round. Total words typed correctly earns a rank: Newbie, Hodler (150), Diamond Hands (500), Whale (1,500) and Satoshi (4,000).</p>
+        <h3>Supporters</h3>
+        <p>A tip of 0.01 XNO or more unlocks the extra accent colours and a fourth life. Tips are optional and the whole game is free.</p>
+      </div>
+    </details>
+
+    <section class="card2" aria-label="Daily challenge">
+      <h2>Daily challenge <span class="mono" id="d-no"></span></h2>
+      <p id="d-desc"></p>
+      <div class="stats">
+        <div class="stat"><small>Daily streak</small><b id="s-streak">0</b></div>
+        <div class="stat"><small>Best streak</small><b id="s-bstreak">0</b></div>
+        <div class="stat"><small>Days played</small><b id="s-days">0</b></div>
+        <div class="stat"><small>Today</small><b id="s-today">Open</b></div>
+      </div>
+      <div class="row2"><button type="button" class="primary" id="d-play">Play today's challenge</button></div>
+      <p class="hint" id="d-reset"></p>
+    </section>
+
+    <section class="card2" aria-label="Your record">
+      <h2>Your record</h2>
+      <div class="stats">
+        <div class="stat"><small>Rank</small><b id="r-rank">Newbie</b></div>
+        <div class="stat"><small>Words typed</small><b id="r-words">0</b></div>
+        <div class="stat"><small>Accuracy</small><b id="r-acc">-</b></div>
+        <div class="stat"><small>Best WPM</small><b id="r-wpm">0</b></div>
+        <div class="stat"><small>Best Quick score</small><b id="r-bq">0</b></div>
+        <div class="stat"><small>Best Survival</small><b id="r-bs">0</b></div>
+      </div>
+    </section>
+
+    <section class="card2" aria-label="Accent colours">
+      <h2>Accent colour</h2>
+      <div class="themes" id="themes" role="group" aria-label="Accent colours"></div>
+      <p id="theme-note"></p>
+    </section>
+
+    <aside class="card2" id="tip" aria-label="Tip the author">
+      <h2>Enjoying it? Send some XNO.</h2>
+      <p>Tips are optional and go straight to the creator's Nano wallet. Transfers settle in seconds with no fee. A tip of 0.01 XNO or more unlocks the supporter perks.</p>
+      <div class="amounts" role="group" aria-label="Amount">
+        <button type="button" data-amt="0.01" aria-pressed="true">0.01 XNO</button>
+        <button type="button" data-amt="0.05" aria-pressed="false">0.05 XNO</button>
+        <button type="button" data-amt="0.1" aria-pressed="false">0.1 XNO</button>
+        <button type="button" data-amt="" aria-pressed="false">Any amount</button>
+      </div>
+      <div class="pay">
+        <div class="qr" id="qr"></div>
+        <div class="addr-box">
+          <a class="btn primary" id="openw" href="#">Open in wallet</a>
+          <div class="addr" id="addr"></div>
+          <div class="row2">
+            <button type="button" id="copy">Copy address</button>
+            <button type="button" id="check">I've sent it, check</button>
+          </div>
+          <div class="status" id="tstatus" role="status"></div>
+          <p class="hint" id="thint"></p>
+        </div>
+      </div>
+    </aside>
+
+    <footer>Only send XNO to the address shown above. Transfers on the Nano network cannot be reversed. The game works best with a physical keyboard; it also works with a phone's on-screen keyboard.</footer>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = function (id) { return document.getElementById(id); };
+  const NANO_ADDRESS = "nano_3a7e3irpbpxbh1n7dk9u3cm9tnd97q1unjxn67ni9gijoxfmzguitx1xgc9u";
+  const RPCS = ["https://rpc.nano.to", "https://node.somenano.com/proxy"];
+  function lsGet(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+  function jget(k, d) { try { const v = JSON.parse(lsGet(k, "")); return v === null || v === undefined ? d : v; } catch (e) { return d; } }
+
+  // ---------- word bank ----------
+  const SHORT = ["coin", "nano", "block", "chain", "token", "wallet", "mine", "stake", "fees", "swap", "vault", "seed", "keys", "trust", "speed", "green", "send", "moon", "pump", "dump", "bear", "bull", "whale", "node", "proof", "fast", "open", "raw", "gas", "cold", "hot", "cash", "trade", "price", "chart", "candle", "dip", "rally", "surge", "crash", "panic", "scam", "trap", "dust", "spam", "queue", "zero"];
+  const MEDIUM = ["bitcoin", "ethereum", "litecoin", "monero", "dogecoin", "feeless", "lattice", "ledger", "mining", "staking", "mempool", "genesis", "address", "network", "protocol", "hashrate", "satoshi", "airdrop", "consensus", "exchange", "currency", "deposit", "withdraw", "balance", "portfolio", "volatile", "immutable", "custody", "liquidity", "slippage", "validator", "confirmation", "transaction", "blockchain", "cryptography", "signature", "timestamp"];
+  const HARD = ["block lattice", "cold wallet", "hot wallet", "seed phrase", "smart contract", "private key", "public key", "proof of work", "proof of stake", "gas fee", "layer two", "double spend", "open representative", "hardware wallet", "paper wallet", "market cap", "all time high", "dollar cost average", "not your keys", "fifty one percent", "moving average", "bear market", "bull market", "diamond hands", "paper hands", "to the moon", "buy the dip", "hold the line", "zero confirmation", "instant settlement"];
+  const ALL = SHORT.concat(MEDIUM, HARD);
+  const RANKS = [{ at: 0, n: "Newbie" }, { at: 150, n: "Hodler" }, { at: 500, n: "Diamond Hands" }, { at: 1500, n: "Whale" }, { at: 4000, n: "Satoshi" }];
+  const ACCENTS = [
+    { id: "blue", name: "Blue", c: "#4ea1ff", free: true }, { id: "violet", name: "Violet", c: "#a78bfa", free: true },
+    { id: "gold", name: "Gold", c: "#fbbf24" }, { id: "mint", name: "Mint", c: "#2dd4bf" }, { id: "neon", name: "Neon", c: "#e879f9" }
+  ];
+  function rankFor(n) { let r = RANKS[0]; RANKS.forEach(function (x) { if (n >= x.at) r = x; }); return r; }
+  function dateKey(d) { return (d || new Date()).toISOString().slice(0, 10); }
+  function prevKey(k) { return dateKey(new Date(Date.parse(k + "T00:00:00Z") - 864e5)); }
+  const EPOCH = Date.UTC(2026, 9, 31);
+  function dayNumber(k) { return Math.max(1, Math.round((Date.parse(k + "T00:00:00Z") - EPOCH) / 864e5) + 1); }
+  function xmur3(str) {
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+    return function () { h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); h ^= h >>> 16; return h >>> 0; };
+  }
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function shuffle(arr, rng) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = arr[i]; arr[i] = arr[j]; arr[j] = t; } return arr; }
+  function pick(arr, rng) { return arr[Math.floor(rng() * arr.length)]; }
+
+  // ---------- storage ----------
+  let supporter = lsGet("nt-sup", "0") === "1";
+  let accent = lsGet("nt-accent", "blue");
+  let muted = lsGet("nt-mute", "0") === "1";
+  const stats = Object.assign({ words: 0, keys: 0, misses: 0, bestWpm: 0, bestQuick: 0, bestSurv: 0 }, jget("nt-stats", {}));
+  const daily = Object.assign({ last: "", streak: 0, best: 0, played: 0, cleared: false, progress: 0 }, jget("nt-daily", {}));
+  function accentOk(id) { const a = ACCENTS.filter(function (x) { return x.id === id; })[0]; return !!a && (a.free || supporter); }
+  if (!accentOk(accent)) accent = "blue";
+  function saveStats() { lsSet("nt-stats", JSON.stringify(stats)); }
+  function liveStreak() { const k = dateKey(); return (daily.last === k || daily.last === prevKey(k)) ? daily.streak : 0; }
+  function recordDaily(key, cleared, progress) {
+    if (daily.last === key) return false;
+    daily.streak = daily.last === prevKey(key) ? daily.streak + 1 : 1;
+    daily.last = key; daily.best = Math.max(daily.best, daily.streak); daily.played++; daily.cleared = cleared; daily.progress = progress;
+    lsSet("nt-daily", JSON.stringify(daily)); return true;
+  }
+  function livesMax() { return supporter ? 4 : 3; }
+
+  // ---------- audio ----------
+  let ac = null;
+  function beep(freq, dur, type, vol, delay) {
+    if (muted) return;
+    try {
+      if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === "suspended") ac.resume();
+      const t = ac.currentTime + (delay || 0), o = ac.createOscillator(), g = ac.createGain();
+      o.type = type || "triangle"; o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(vol || 0.05, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+    } catch (e) {}
+  }
+  const sfx = {
+    key: function () { beep(1500, 0.03, "square", 0.015); },
+    word: function (combo) { const k = 1 + Math.min(combo, 10) * 0.04; beep(660 * k, 0.07, "triangle", 0.05); beep(990 * k, 0.12, "triangle", 0.05, 0.05); },
+    miss: function () { beep(180, 0.1, "sawtooth", 0.04); },
+    life: function () { beep(300, 0.2, "sawtooth", 0.05); beep(180, 0.3, "sawtooth", 0.05, 0.1); },
+    win: function () { [523, 659, 784, 1047].forEach(function (f, i) { beep(f, 0.16, "triangle", 0.07, i * 0.1); }); }
+  };
+  function vib(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
+  function renderSound() { $("snd").textContent = muted ? "Sound off" : "Sound on"; $("snd").setAttribute("aria-pressed", muted ? "false" : "true"); }
+  $("snd").addEventListener("click", function () { muted = !muted; lsSet("nt-mute", muted ? "1" : "0"); renderSound(); if (!muted) beep(660, 0.08); });
+  let toastT = 0;
+  function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, 3500); }
+
+  // ---------- canvas setup ----------
+  const cv = $("c"), ctx = cv.getContext("2d");
+  const W = 360, H = 560, GROUND = H - 34, LANES = 5, LANE_W = W / LANES, SPAWN_GAP_Y = 120;
+  const DAILY_TARGET = 20, QUICK_TIME = 60;
+  function fit() {
+    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    cv.width = W * dpr; cv.height = H * dpr; cv.style.width = "100%"; cv.style.height = "auto";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  fit(); window.addEventListener("resize", fit);
+
+  // ---------- game state ----------
+  let mode = "quick", rng = Math.random, words = [], locked = null, score = 0, combo = 0, bestCombo = 0;
+  let lives = 3, livesStart = 3, correctChars = 0, wrongKeys = 0, totalKeys = 0, wordsDone = 0, startedAt = 0, elapsed = 0;
+  let timeLeft = QUICK_TIME, spawnAcc = 0, phase = "idle", dailyCfg = null, dailyQueue = [], dailyIdx = 0, dailyProcessed = 0;
+  let shakeT = 0, flashT = 0, particles = [], nextId = 1, running = false, lastT = 0;
+  function speedFor() {
+    const base = 42, t = elapsed;
+    if (mode === "survival") return Math.min(base + t * 2.1 + score * 0.012, 230);
+    if (mode === "quick") return Math.min(base + (QUICK_TIME - timeLeft) * 1.6, 170);
+    return base + Math.min(dailyProcessed * 2.5, 50);
+  }
+  function spawnIntervalFor() {
+    if (mode === "survival") return Math.max(430, 1350 - elapsed * 22);
+    if (mode === "quick") return Math.max(480, 1300 - (QUICK_TIME - timeLeft) * 14);
+    return 1100;
+  }
+  function wordFor() {
+    if (mode === "daily") return dailyQueue[dailyIdx++];
+    const t = elapsed, r = rng();
+    if (t < 10) return pick(SHORT, rng);
+    if (t < 25) return r < 0.7 ? pick(SHORT, rng) : pick(MEDIUM, rng);
+    if (t < 50) return r < 0.45 ? pick(SHORT, rng) : (r < 0.85 ? pick(MEDIUM, rng) : pick(HARD, rng));
+    return r < 0.3 ? pick(SHORT, rng) : (r < 0.65 ? pick(MEDIUM, rng) : pick(HARD, rng));
+  }
+  function freeLanes() {
+    const minY = [Infinity, Infinity, Infinity, Infinity, Infinity];
+    words.forEach(function (w) { if (w.lane != null) minY[w.lane] = Math.min(minY[w.lane], w.y); });
+    const out = []; for (let i = 0; i < LANES; i++) if (minY[i] > SPAWN_GAP_Y) out.push(i);
+    return out;
+  }
+  function spawnWord() {
+    const lanes = freeLanes(); if (!lanes.length) return;
+    const lane = lanes[Math.floor(rng() * lanes.length)];
+    const text = wordFor(); if (!text) return;
+    words.push({ id: nextId++, text: text, typed: 0, lane: lane, x: lane * LANE_W + LANE_W / 2, y: -18, flash: 0 });
+  }
+  function colorForLen(n) { return n <= 6 ? "#4ade80" : n <= 11 ? "#fbbf24" : "#ff8a65"; }
+  function burst(x, y, color) {
+    for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; particles.push({ x: x, y: y, vx: Math.cos(a) * (60 + rng() * 60), vy: Math.sin(a) * (60 + rng() * 60), life: 0.5, color: color }); }
+  }
+
+  function resetRoundState() {
+    words = []; locked = null; score = 0; combo = 0; bestCombo = 0; correctChars = 0; wrongKeys = 0; totalKeys = 0; wordsDone = 0;
+    elapsed = 0; spawnAcc = 0; timeLeft = QUICK_TIME; particles = []; shakeT = 0; flashT = 0;
+    livesStart = livesMax(); lives = livesStart; startedAt = performance.now();
+    dailyIdx = 0; dailyProcessed = 0;
+  }
+  function newRound() {
+    $("ov").hidden = true;
+    if (mode === "daily") { dailyCfg = { key: dateKey(), no: dayNumber(dateKey()) }; rng = mulberry32(xmur3("feeless-typer-" + dailyCfg.key)()); dailyQueue = []; for (let i = 0; i < DAILY_TARGET; i++) dailyQueue.push(wordForDailyIdx(i)); }
+    else { dailyCfg = null; rng = Math.random; }
+    resetRoundState(); phase = "playing"; renderMode(); renderHud(); running = true; lastT = performance.now();
+  }
+  function wordForDailyIdx(i) {
+    const r = rng(); if (i < 6) return pick(SHORT, rng); if (i < 13) return r < 0.5 ? pick(SHORT, rng) : pick(MEDIUM, rng);
+    return r < 0.3 ? pick(SHORT, rng) : (r < 0.65 ? pick(MEDIUM, rng) : pick(HARD, rng));
+  }
+
+  function completeWord(w) {
+    const bonus = Math.round(w.text.length * 2 * (1 + Math.min(combo, 12) * 0.12));
+    score += bonus; combo++; bestCombo = Math.max(bestCombo, combo); wordsDone++; stats.words++;
+    correctChars += w.text.replace(/\s/g, "").length;
+    words.splice(words.indexOf(w), 1); if (locked === w) locked = null;
+    burst(w.x, w.y, colorForLen(w.text.length)); sfx.word(combo); vib(8);
+    if (mode === "daily") { dailyProcessed++; checkDailyEnd(); }
+    saveStats();
+  }
+  function missKey() { wrongKeys++; totalKeys++; combo = 0; sfx.miss(); if (locked) locked.flash = 0.2; }
+  function loseLife(w) {
+    if (locked === w) locked = null;
+    words.splice(words.indexOf(w), 1); lives--; combo = 0; flashT = 0.25; shakeT = 0.25; sfx.life(); vib([0, 30, 40, 30]);
+    if (mode === "daily") { dailyProcessed++; checkDailyEnd(); }
+    if (lives <= 0) endRound();
+  }
+  function checkDailyEnd() { if (dailyProcessed >= DAILY_TARGET) endRound(); }
+
+  function processChar(c) {
+    if (phase !== "playing") return;
+    c = c.toLowerCase();
+    if (!/^[a-z ]$/.test(c)) return;
+    totalKeys++;
+    if (locked) {
+      if (locked.text[locked.typed] === c) {
+        locked.typed++;
+        if (locked.typed >= locked.text.length) completeWord(locked);
+      } else missKey();
+      renderHud(); return;
+    }
+    const cand = words.filter(function (w) { return w.typed === 0 && w.text[0] === c; });
+    if (cand.length) {
+      cand.sort(function (a, b) { return b.y - a.y; });
+      const w = cand[0]; w.typed = 1;
+      if (w.typed >= w.text.length) completeWord(w); else locked = w;
+    } else missKey();
+    renderHud();
+  }
+
+  function endRound() {
+    phase = "done"; running = false;
+    stats.misses += wrongKeys; stats.keys += totalKeys;
+    const mins = Math.max(elapsed, 1) / 60, wpm = Math.round((correctChars / 5) / mins);
+    const acc = totalKeys ? Math.round(((totalKeys - wrongKeys) / totalKeys) * 100) : 100;
+    stats.bestWpm = Math.max(stats.bestWpm, wpm);
+    let isBest = false;
+    if (mode === "quick" && score > stats.bestQuick) { stats.bestQuick = score; isBest = true; }
+    if (mode === "survival" && score > stats.bestSurv) { stats.bestSurv = score; isBest = true; }
+    let firstDaily = false, cleared = false;
+    if (mode === "daily") { cleared = lives > 0 && dailyProcessed >= DAILY_TARGET; firstDaily = recordDaily(dailyCfg.key, cleared, dailyProcessed); }
+    saveStats(); renderStats(); renderDaily(); if (cleared || mode !== "daily") sfx.win();
+    $("o-title").textContent = mode === "daily" ? ("Daily #" + dailyCfg.no + (cleared ? " cleared" : " ended")) : (mode === "survival" ? "Survival over" : "Time's up");
+    $("o-score").textContent = score;
+    $("o-new").hidden = !isBest || score === 0;
+    $("o-text").textContent = wordsDone + " words typed, " + wpm + " WPM, " + acc + "% accuracy. Best combo " + bestCombo + ". Rank: " + rankFor(stats.words).n + "." +
+      (mode === "daily" ? " Daily streak: " + liveStreak() + "." + (cleared ? "" : " (" + dailyProcessed + "/" + DAILY_TARGET + " reached.)") + (firstDaily ? "" : " (Replay, streak already counted today.)") : "");
+    $("o-status").textContent = "";
+    $("o-again").textContent = mode === "daily" ? "Replay today's challenge" : "Play again";
+    $("ov").hidden = false;
+    try { $("o-again").focus({ preventScroll: true }); } catch (e) {}
+    try { $("typer").blur(); } catch (e) {}
+  }
+
+  $("restart").addEventListener("click", newRound);
+  $("o-again").addEventListener("click", newRound);
+  ["daily", "quick", "survival"].forEach(function (m) { $("m-" + m).addEventListener("click", function () { mode = m; newRound(); }); });
+  $("d-play").addEventListener("click", function () { mode = "daily"; newRound(); try { $("stage").scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {} });
+  $("b-tipjump").addEventListener("click", function () { try { $("tip").scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {} });
+
+  // ---------- typing input ----------
+  const field = $("typer"), tapzone = $("tapzone");
+  function focusField() { try { field.focus({ preventScroll: true }); } catch (e) { field.focus(); } }
+  tapzone.addEventListener("click", function () { focusField(); if (phase !== "playing") newRound(); });
+  cv.addEventListener("click", focusField);
+  field.addEventListener("input", function () {
+    const v = field.value;
+    for (let i = 0; i < v.length; i++) { processChar(v[i]); sfx.key(); }
+    field.value = "";
+  });
+  field.addEventListener("focus", function () { tapzone.hidden = true; });
+  field.addEventListener("blur", function () { if (phase === "playing") tapzone.hidden = false; });
+  document.addEventListener("visibilitychange", function () { if (document.hidden) running = false; else { lastT = performance.now(); running = phase === "playing"; } });
+
+  // ---------- loop ----------
+  function step(t) {
+    requestAnimationFrame(step);
+    const dt = Math.min(0.05, (t - (lastT || t)) / 1000); lastT = t;
+    if (!running || phase !== "playing") { draw(); return; }
+    elapsed += dt;
+    if (mode === "quick") { timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; draw(); endRound(); return; } }
+    spawnAcc += dt * 1000;
+    const iv = spawnIntervalFor();
+    while (spawnAcc >= iv && (mode !== "daily" || dailyIdx < DAILY_TARGET)) { spawnAcc -= iv; spawnWord(); }
+    const sp = speedFor();
+    for (let i = words.length - 1; i >= 0; i--) {
+      const w = words[i]; w.y += sp * dt; if (w.flash > 0) w.flash -= dt;
+      if (w.y >= GROUND) loseLife(w);
+    }
+    for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 160 * dt; p.life -= dt; if (p.life <= 0) particles.splice(i, 1); }
+    if (shakeT > 0) shakeT -= dt; if (flashT > 0) flashT -= dt;
+    renderHud(); draw();
+  }
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (shakeT > 0) ctx.translate((Math.random() - 0.5) * 6 * (shakeT / 0.25), (Math.random() - 0.5) * 6 * (shakeT / 0.25));
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#0b1220"); g.addColorStop(1, "#0e1729");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = "#1b2740"; ctx.lineWidth = 1;
+    for (let i = 1; i < LANES; i++) { ctx.beginPath(); ctx.moveTo(i * LANE_W, 0); ctx.lineTo(i * LANE_W, GROUND); ctx.stroke(); }
+    ctx.strokeStyle = flashT > 0 ? "#ff6b6b" : "#24334f"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, GROUND); ctx.lineTo(W, GROUND); ctx.stroke();
+    const accentCol = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#4ea1ff";
+    words.forEach(function (w) {
+      const fw = Math.max(54, w.text.length * 11 + 16), fh = 30;
+      ctx.save(); ctx.translate(w.x, w.y);
+      ctx.fillStyle = w.flash > 0 ? "rgba(255,107,107,0.22)" : (w === locked ? "rgba(78,161,255,0.16)" : "rgba(18,28,48,0.92)");
+      ctx.strokeStyle = w === locked ? accentCol : "#24334f"; ctx.lineWidth = w === locked ? 2 : 1;
+      roundRect(ctx, -fw / 2, -fh / 2, fw, fh, 7); ctx.fill(); ctx.stroke();
+      ctx.font = "600 13px 'JetBrains Mono',monospace"; ctx.textBaseline = "middle";
+      const done = w.text.slice(0, w.typed), rest = w.text.slice(w.typed);
+      const doneW = ctx.measureText(done).width, restW = ctx.measureText(rest).width, total = doneW + restW;
+      let cx = -total / 2;
+      ctx.fillStyle = accentCol; ctx.textAlign = "left"; ctx.fillText(done, cx, 1); cx += doneW;
+      ctx.fillStyle = "#e7eefc"; ctx.fillText(rest, cx, 1);
+      ctx.restore();
+    });
+    particles.forEach(function (p) { ctx.globalAlpha = Math.max(0, p.life / 0.5); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 2.6, 0, 7); ctx.fill(); ctx.globalAlpha = 1; });
+    if (flashT > 0) { ctx.fillStyle = "rgba(255,107,107," + (flashT / 0.25 * 0.18) + ")"; ctx.fillRect(0, 0, W, H); }
+    ctx.restore();
+  }
+  function roundRect(c, x, y, w, h, r) {
+    c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+  }
+  requestAnimationFrame(step);
+
+  // ---------- hud/ui ----------
+  function renderHud() {
+    $("h-score").textContent = score; $("h-combo").textContent = combo;
+    $("h-lives").textContent = new Array(Math.max(0, lives) + 1).join("♥") + new Array(Math.max(0, livesStart - lives) + 1).join("♡");
+    if (mode === "daily") { $("h-plabel").textContent = "Progress"; $("h-p").textContent = Math.min(dailyProcessed, DAILY_TARGET) + "/" + DAILY_TARGET; }
+    else if (mode === "quick") { $("h-plabel").textContent = "Time"; $("h-p").textContent = Math.ceil(timeLeft) + "s"; }
+    else { $("h-plabel").textContent = "Words"; $("h-p").textContent = wordsDone; }
+  }
+  function renderMode() {
+    ["daily", "quick", "survival"].forEach(function (m) { $("m-" + m).setAttribute("aria-pressed", mode === m ? "true" : "false"); });
+    const box = $("modbox"); box.textContent = ""; const b = document.createElement("b");
+    if (mode === "daily") { b.textContent = "Daily #" + (dailyCfg ? dailyCfg.no : dayNumber(dateKey())) + ": "; box.appendChild(b); box.appendChild(document.createTextNode("20 words, the same order for everyone today.")); }
+    else if (mode === "survival") { b.textContent = "Survival: "; box.appendChild(b); box.appendChild(document.createTextNode("endless, words get faster. Game over at 0 lives.")); }
+    else { b.textContent = "Quick 60: "; box.appendChild(b); box.appendChild(document.createTextNode("60 seconds, score as many words as you can.")); }
+  }
+  function renderStats() {
+    stats.words = stats.words || 0;
+    $("r-rank").textContent = rankFor(stats.words).n; $("r-words").textContent = stats.words;
+    $("r-acc").textContent = stats.keys ? Math.round(((stats.keys - stats.misses) / stats.keys) * 100) + "%" : "-";
+    $("r-wpm").textContent = stats.bestWpm; $("r-bq").textContent = stats.bestQuick; $("r-bs").textContent = stats.bestSurv;
+  }
+  function renderDaily() {
+    const k = dateKey(), done2 = daily.last === k, s = liveStreak();
+    $("dayno").textContent = "Daily #" + dayNumber(k); $("d-no").textContent = "#" + dayNumber(k);
+    $("d-desc").textContent = done2 ? ("You " + (daily.cleared ? "cleared" : "reached " + daily.progress + "/" + DAILY_TARGET + " in") + " today's challenge. Come back tomorrow for a new one.") : ("Clear all " + DAILY_TARGET + " words without losing all your lives to " + (s ? "extend" : "start") + " a streak.");
+    $("s-streak").textContent = s; $("s-bstreak").textContent = daily.best; $("s-days").textContent = daily.played;
+    $("s-today").textContent = done2 ? (daily.cleared ? "Cleared" : daily.progress + "/" + DAILY_TARGET) : "Open";
+    $("d-play").textContent = done2 ? "Replay today's challenge" : "Play today's challenge";
+    const left = Math.max(0, Date.parse(k + "T00:00:00Z") + 864e5 - Date.now());
+    $("d-reset").textContent = "New challenge in " + Math.floor(left / 36e5) + "h " + Math.floor(left % 36e5 / 6e4) + "m (00:00 UTC).";
+  }
+  function applyAccent() { const a = ACCENTS.filter(function (x) { return x.id === accent; })[0] || ACCENTS[0]; document.documentElement.style.setProperty("--accent", a.c); }
+  function renderThemes() {
+    const box = $("themes"); box.textContent = "";
+    ACCENTS.forEach(function (a) {
+      const ok = accentOk(a.id), b = document.createElement("button"); b.type = "button";
+      b.disabled = !ok; b.setAttribute("aria-pressed", a.id === accent ? "true" : "false");
+      const n = document.createElement("span"); n.textContent = a.name; n.style.color = a.c;
+      const s = document.createElement("small"); s.textContent = a.free ? "Free" : (supporter ? "Supporter" : "Supporters");
+      b.appendChild(n); b.appendChild(s);
+      b.addEventListener("click", function () { accent = a.id; lsSet("nt-accent", accent); applyAccent(); renderThemes(); });
+      box.appendChild(b);
+    });
+    $("theme-note").textContent = supporter ? "Thank you for supporting the game. You get a 4th life every round." : "Tip 0.01 XNO or more to unlock the Gold, Mint and Neon accents and a 4th life.";
+    $("supmark").hidden = !supporter;
+  }
+
+  // ---------- share ----------
+  function copyText(text, ok, fail) { try { navigator.clipboard.writeText(text).then(ok, fail); } catch (e) { fail(); } }
+  function shareUrl() { return location.href.split("#")[0].split("?")[0]; }
+  $("o-share").addEventListener("click", function () {
+    const mins = Math.max(elapsed, 1) / 60, wpm = Math.round((correctChars / 5) / mins);
+    const head = mode === "daily" ? "Feeless Typer #" + dailyCfg.no : (mode === "survival" ? "Feeless Typer Survival" : "Feeless Typer");
+    const msg = head + ": " + wpm + " WPM, score " + score + ", " + wordsDone + " words\nCan you beat it? " + shareUrl();
+    const fallback = function () { copyText(msg, function () { $("o-status").textContent = "Copied. Paste it into a message to challenge a friend."; }, function () { $("o-status").textContent = msg; }); };
+    if (navigator.share) { navigator.share({ text: msg }).catch(fallback); return; }
+    fallback();
+  });
+  $("o-tip").addEventListener("click", function () { pickAmount(document.querySelector('.amounts button[data-amt="0.01"]')); $("ov").hidden = true; try { $("tip").scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {} });
+
+  // ---------- tip card ----------
+  let tipAmt = "0.01", qr = null, checking = false;
+  function toRaw(xno) { const parts = xno.split("."), frac = ((parts[1] || "") + "000000000000000000000000000000").slice(0, 30); return (BigInt(parts[0]) * 10n ** 30n + BigInt(frac)).toString(); }
+  function uriFor(a) { return "nano:" + NANO_ADDRESS + (a ? "?amount=" + toRaw(a) : ""); }
+  function setPending() { if (tipAmt) lsSet("nt-tip", JSON.stringify({ amt: tipAmt, ts: Date.now() })); }
+  function renderTip() {
+    $("addr").textContent = NANO_ADDRESS;
+    const uri = uriFor(tipAmt);
+    $("openw").href = uri; $("check").hidden = !tipAmt;
+    $("thint").textContent = tipAmt ? "On a phone, tap Open in wallet. On a computer, scan the code with your Nano wallet. Then press the check button." : "Any amount is welcome. Tips sent this way can't be checked automatically, so they don't unlock the supporter perks.";
+    try {
+      if (typeof QRCode === "undefined") throw new Error("no qr");
+      if (!qr) qr = new QRCode($("qr"), { text: uri, width: 168, height: 168, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+      else { qr.clear(); qr.makeCode(uri); }
+    } catch (e) { $("qr").style.display = "none"; }
+  }
+  function pickAmount(btn) {
+    if (!btn) return;
+    document.querySelectorAll(".amounts button").forEach(function (o) { o.setAttribute("aria-pressed", "false"); });
+    btn.setAttribute("aria-pressed", "true");
+    tipAmt = btn.getAttribute("data-amt"); setPending(); renderTip(); $("tstatus").textContent = "";
+  }
+  document.querySelectorAll(".amounts button").forEach(function (b) { b.addEventListener("click", function () { pickAmount(b); }); });
+  $("openw").addEventListener("click", function () { setPending(); $("tstatus").textContent = "After you send, come back here and press the check button."; });
+  $("copy").addEventListener("click", function () {
+    setPending();
+    copyText(NANO_ADDRESS, function () { $("tstatus").textContent = "Address copied."; }, function () {
+      const r = document.createRange(); r.selectNodeContents($("addr")); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      $("tstatus").textContent = "Address selected. Press copy on your device.";
+    });
+  });
+  function rpc(body) {
+    let i = 0;
+    return new Promise(function (resolve, reject) {
+      (function next2() {
+        if (i >= RPCS.length) { reject(new Error("unreachable")); return; }
+        const url = RPCS[i++], ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 6000);
+        fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ctl.signal })
+          .then(function (r) { return r.json(); }).then(function (j) { clearTimeout(t); resolve(j); }).catch(function () { clearTimeout(t); next2(); });
+      })();
+    });
+  }
+  async function findTip(min, since) {
+    const claimed = jget("nt-claimed", []), need = BigInt(toRaw(min));
+    let reachable = false;
+    try {
+      const h = await rpc({ action: "account_history", account: NANO_ADDRESS, count: "60" });
+      reachable = true;
+      if (h && Array.isArray(h.history)) {
+        for (const b of h.history) {
+          if (b.type !== "receive" || claimed.indexOf(b.hash) >= 0) continue;
+          const ts = +b.local_timestamp; if (ts > 0 && ts * 1000 < since - 120000) continue;
+          if (BigInt(b.amount) >= need) return { ok: true, hash: b.hash };
+        }
+      }
+    } catch (e) {}
+    for (const cmd of ["receivable", "pending"]) {
+      try {
+        const p = await rpc({ action: cmd, account: NANO_ADDRESS, count: "60", threshold: need.toString(), source: "true" });
+        reachable = true; if (p && p.error) continue;
+        const bl = p && p.blocks;
+        if (bl && typeof bl === "object") {
+          for (const hsh in bl) { if (claimed.indexOf(hsh) >= 0) continue; const v = bl[hsh], amt = typeof v === "object" ? v.amount : v; if (BigInt(amt) >= need) return { ok: true, hash: hsh }; }
+        }
+        break;
+      } catch (e) {}
+    }
+    return { ok: false, reachable: reachable };
+  }
+  function unlockSupporter(hash) {
+    const claimed = jget("nt-claimed", []); claimed.push(hash); lsSet("nt-claimed", JSON.stringify(claimed.slice(-50)));
+    supporter = true; lsSet("nt-sup", "1"); renderThemes(); lsSet("nt-tip", ""); renderHud();
+    $("tstatus").textContent = "Thank you! Your tip arrived. Supporter accents and a 4th life are unlocked.";
+  }
+  async function runCheck(tries, silent) {
+    if (checking) return;
+    const pend = jget("nt-tip", null);
+    if (!pend || !pend.amt) { if (!silent) $("tstatus").textContent = "Pick an amount first."; return; }
+    checking = true; $("check").disabled = true;
+    if (!silent) $("tstatus").textContent = "Checking the Nano network…";
+    let res = { ok: false, reachable: false };
+    for (let i = 0; i < tries; i++) { res = await findTip(pend.amt, pend.ts); if (res.ok) break; if (i < tries - 1) await new Promise(function (r) { setTimeout(r, 4000); }); }
+    checking = false; $("check").disabled = false;
+    if (res.ok) unlockSupporter(res.hash);
+    else if (!silent) $("tstatus").textContent = res.reachable ? "Not seen yet. Transfers take a few seconds, so press the check button again in a moment." : "Couldn't reach the Nano network from here. Try again shortly.";
+  }
+  $("check").addEventListener("click", function () { runCheck(8, false); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && !supporter && jget("nt-tip", null)) runCheck(4, true); });
+  { const p = jget("nt-tip", null); if (p && !p.amt) lsSet("nt-tip", ""); }
+
+  // ---------- go ----------
+  applyAccent(); renderSound(); renderThemes(); renderTip(); renderDaily(); renderStats();
+  setInterval(renderDaily, 30000);
+  newRound();
+  if (/[?&]selftest/.test(location.search)) {
+    window.__nt = {
+      processChar: processChar, newRound: newRound, setMode: function (m) { mode = m; newRound(); },
+      tickFrames: function (n, ms) { const dt = (ms || 16) / 1000; for (let i = 0; i < n; i++) { elapsed += dt; if (mode === "quick") timeLeft = Math.max(0, timeLeft - dt); spawnAcc += dt * 1000; const iv = spawnIntervalFor(); while (spawnAcc >= iv && (mode !== "daily" || dailyIdx < DAILY_TARGET)) { spawnAcc -= iv; spawnWord(); } const sp = speedFor(); for (let j = words.length - 1; j >= 0; j--) { const w = words[j]; w.y += sp * dt; if (w.y >= GROUND) loseLife(w); } if (mode === "quick" && timeLeft <= 0) { endRound(); break; } if (phase === "done") break; } renderHud(); },
+      typeWord: function (w) { for (const c of w.text) processChar(c); },
+      get phase() { return phase; }, get words() { return words; }, get locked() { return locked; }, get score() { return score; }, get combo() { return combo; },
+      get lives() { return lives; }, get wordsDone() { return wordsDone; }, get daily() { return daily; }, get stats() { return stats; }, get dailyQueue() { return dailyQueue; },
+      get dailyProcessed() { return dailyProcessed; }, setSupporter: function (v) { supporter = v; }
+    };
+  }
+})();
+</script>
+</body></html>
